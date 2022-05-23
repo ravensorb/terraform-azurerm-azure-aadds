@@ -231,8 +231,8 @@ data "azuread_group" "dc_admins" {
 
 resource "azuread_group_member" "dc_admins" {
   count             = var.create_domain_group ? 0 : 1
-  group_object_id   = data.azuread_group.dc_admins
-  member_object_id  = element(coalescelist(azuread_user.dc_admin.*, data.azuread_user.dc_admin.*.object_id, [""]), 0)
+  group_object_id   = element(coalescelist(data.azuread_group.dc_admins.*.object_id, data.azuread_group.dc_admins.*.object_id, [""]), 0)
+  member_object_id  = element(coalescelist(azuread_user.dc_admin.*.object_id, data.azuread_user.dc_admin.*.object_id, [""]), 0)
 }
 
 #-------------------------------------
