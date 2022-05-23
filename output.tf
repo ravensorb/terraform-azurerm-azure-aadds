@@ -41,6 +41,6 @@ output "domain_admin_upn" {
 
 output "domain_admin_password" {
   description = "The password for the domain admin created"
-  value       = element(coalescelist(data.azuread_user.dc_admin.*.password, azuread_user.dc_admin.*.password, [""]), 0)
+  value       = var.create_domain_admin ? azuread_user.dc_admin.0.password : ""
   sensitive   = true
 }
