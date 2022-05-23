@@ -36,11 +36,11 @@ output "subnet_name" {
 
 output "domain_admin_upn" {
   description = "The upn of the domain admin created"
-  value       = azuread_user.dc_admin.user_principal_name
+  value       = element(coalescelist(data.azuread_user.dc_admin.*.user_principal_name, azuread_user.dc_admin.*.user_principal_name, [""]), 0)
 }
 
 output "domain_admin_password" {
   description = "The password for the domain admin created"
-  value       = azuread_user.dc_admin.password
+  value       = element(coalescelist(data.azuread_user.dc_admin.*.password, azuread_user.dc_admin.*.password, [""]), 0)
   sensitive   = true
 }

@@ -190,7 +190,7 @@ resource "random_password" "dc_admin" {
   length = 64
 }
 
-data "azureread_user" "dc_admin" {
+data "azuread_user" "dc_admin" {
   count = var.create_domain_admin ? 0 : 1
   user_principal_name = var.domain_admin_upn
 }
@@ -213,7 +213,7 @@ resource "azuread_group" "dc_admins" {
   count             = var.create_domain_group ? 1 : 0
   display_name      = "AAD DC Administrators"
   description       = "AADDS Administrators"
-  members           = [ element(coalescelist(azuread_user.dc_admin.*, data.azuread_user.*.object_id, [""]), 0)  ]
+  members           = [ element(coalescelist(azuread_user.dc_admin.*.object_id, data.azuread_user.dc_admin.*.object_id, [""]), 0)  ]
   security_enabled  = true
 
   timeouts {
@@ -232,7 +232,7 @@ data "azuread_group" "dc_admins" {
 resource "azuread_group_member" "dc_admins" {
   count             = var.create_domain_group ? 0 : 1
   group_object_id   = data.azuread_group.dc_admins
-  member_object_id  = element(coalescelist(azuread_user.dc_admin.*, data.azuread_user.*.object_id, [""]), 0)
+  member_object_id  = element(coalescelist(azuread_user.dc_admin.*, data.azuread_user.dc_admin.*.object_id, [""]), 0)
 }
 
 #-------------------------------------
