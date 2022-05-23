@@ -186,26 +186,17 @@ resource "azurerm_resource_provider_registration" "aadds" {
 }
 
 # AADDS DC Admin Group and User
-
-resource "azuread_group" "dc_admins" {
-  display_name     = "AAD DC Administrators"
-  description      = "AADDS Administrators"
-  members          = [ azuread_user.dc_admin.object_id ]
-  security_enabled = true
-
-  timeouts {
-    create  = local.timeout_create
-    delete  = local.timeout_delete
-    read    = local.timeout_read
-    update  = local.timeout_update
-  }
-}
-
 resource "random_password" "dc_admin" {
   length = 64
 }
 
+data "azureread_user" "dc_admin" {
+  count = var.create_domain_admin ? 0 : 1
+  user_principal_name = var.domain_admin_upn
+}
+
 resource "azuread_user" "dc_admin" {  
+  count = var.create_domain_admin ? 1 : 0
   user_principal_name = var.domain_admin_upn
   display_name        = "AADDS DC Administrator"
   password            = var.domain_admin_password != "" ? var.domain_admin_password : random_password.dc_admin.result
@@ -216,6 +207,32 @@ resource "azuread_user" "dc_admin" {
     read    = local.timeout_read
     update  = local.timeout_update
   }
+}
+
+resource "azuread_group" "dc_admins" {
+  count             = var.create_domain_group ? 1 : 0
+  display_name      = "AAD DC Administrators"
+  description       = "AADDS Administrators"
+  members           = [ element(coalescelist(azuread_user.dc_admin.*, data.azuread_user.*.object_id, [""]), 0)  ]
+  security_enabled  = true
+
+  timeouts {
+    create  = local.timeout_create
+    delete  = local.timeout_delete
+    read    = local.timeout_read
+    update  = local.timeout_update
+  }
+}
+
+data "azuread_group" "dc_admins" {
+  count         = var.create_domain_group ? 0 : 1
+  display_name  = "AAD DC Administrators"
+}
+
+resource "azuread_group_member" "dc_admins" {
+  count             = var.create_domain_group ? 0 : 1
+  group_object_id   = data.azuread_group.dc_admins
+  member_object_id  = element(coalescelist(azuread_user.dc_admin.*, data.azuread_user.*.object_id, [""]), 0)
 }
 
 #-------------------------------------

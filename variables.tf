@@ -58,6 +58,11 @@ variable "domain_name" {
   default     = null
 }
 
+variable "create_domain_admin" {
+  description = "(Optional) Indicate if the AADDS admin user should be created"
+  default     = true
+}
+
 variable "domain_admin_upn" {
   description = "(Required) The domain admin user name"
   default     = "aadds-admin"
@@ -66,6 +71,11 @@ variable "domain_admin_upn" {
 variable "domain_admin_password" {
   description = "(Optional) The password to use for the new DC admin (a random one will be created if this is left blank)"
   default     = ""
+}
+
+variable "create_domain_group" {
+  description = "(Optional) Indicate if the AADDS admin group should be created"
+  default     = true
 }
 
 variable "sku" {
