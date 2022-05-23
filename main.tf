@@ -181,7 +181,7 @@ resource "azurerm_resource_provider_registration" "aadds" {
   name = "Microsoft.AAD"
 
   lifecycle {
-    prevent_destroy = true
+    create_before_destroy = true
   }
 }
 
