@@ -87,6 +87,20 @@ module "azure-aadds" {
 ## Pre-requisites 
 Note: these are only required if you are planning to limit network access to specific subnets
 
+Account that is executing this module MUST have permission to create service principals if you need the AADDS service principals automatically regiered 
+
+Use the following article for reference:
+https://docs.microsoft.com/en-us/azure/active-directory-domain-services/powershell-create-instance
+
+```powershell
+Install-Module -Name Az.Resources
+
+if ($null -eq (Get-AzADServicePrincipal -ApplicationId "2565bd9d-da50-47d4-8b85-4c97f669dc36" -ErrorAction SilentlyContainer)) { New-AzADServicePrincipal -ApplicationId "2565bd9d-da50-47d4-8b85-4c97f669dc36" }
+
+Register-AzResourceProvider -ProviderNamespace Microsoft.AAD
+```
+
+
 ### Virtual network / Resource Group Name
 
 You can create a new virtual network in the portal during this process, or use an existing virtual network to limit access to the service. If you are using an existing virtual network, make sure the existing virtual network has a subnet created as well
@@ -127,6 +141,8 @@ Name | Description | Type | Default
 `domain_name`|(Requrired) Domain name to use when creating AADS|`string`|``
 `domain_admin_password`|(Optional) The password to use for the new DC admin (a random one will be created if this is left blank)|`string`|`""`
 `sku`|SKU to use for AADS|`string`|`Standard`
+`network_security_group_name`|(Optional) Name of existing network security group to add nsg rules (leave blank to create a new one)|`string`|
+`network_security_group_resource_group_name`|(Optional) Name of resource group that contains the existing network security group (defaults to the resource group for this module)|`string`|
 `notifications`|Notification Settings|`object`|`{}`
 `security`|Security settings|`object`|`{}`
 `tags`|A map of tags to add to all resources|`map(string)`|{}

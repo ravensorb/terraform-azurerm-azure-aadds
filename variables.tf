@@ -53,6 +53,11 @@ variable "subnet_prefixes" {
   default     = [ "10.100.100.0/24 "]
 }
 
+variable "create_domain_controller_services_service_principal" {
+  description = "Indicates if the standard Domain Controler Services Service Principal should be created in the current AAD env"
+  default     = false
+}
+
 variable "domain_name" {
   description = "(Requrired) Domain name to use when creating AADS"
   default     = null
@@ -91,6 +96,16 @@ variable "notifications" {
     dc_admins      = true
     global_admins  = true
   }
+}
+
+variable "network_security_group_name" {
+  description = "(Optional) Name of existing network security group to add nsg rules (leave blank to create a new one)"
+  default = null
+}
+
+variable "network_security_group_resource_group_name" {
+  description = "(Optional) Name of resource group that contains the existing network security group (defaults to the resource group for this module)"
+  default = null
 }
 
 variable "security" {

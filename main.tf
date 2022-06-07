@@ -2,12 +2,10 @@
 # Local declarations
 #---------------------------------
 # az ad sp create --id "2565bd9d-da50-47d4-8b85-4c97f669dc36"
-# terraform import module.azure-aadds.azurerm_resource_provider_registration.aadds /subscriptions/2cfc6338-ffd7-49af-bc95-4b953575483b/providers/Microsoft.AAD
+# terraform import module.azure-aadds.azurerm_resource_provider_registration.aadds /subscriptions/<subscription id>/providers/Microsoft.AAD
 #---------------------------------
 locals { 
-  resource_group_name = element(coalescelist(data.azurerm_resource_group.rgrp.*.name, azurerm_resource_group.rg.*.name, [""]), 0)
-  resource_prefix     = var.resource_prefix == "" ? local.resource_group_name : var.resource_prefix
-  location            = element(coalescelist(data.azurerm_resource_group.rgrp.*.location, azurerm_resource_group.rg.*.location, [""]), 0)
+  resource_prefix     = var.resource_prefix == "" ? var.resource_group_name : var.resource_prefix
 
   timeout_create  = "240m"
   timeout_update  = "240m"
@@ -18,12 +16,12 @@ locals {
 #---------------------------------------------------------
 # Resource Group Creation or selection - Default is "true"
 #----------------------------------------------------------
-data "azurerm_resource_group" "rgrp" {
+data "azurerm_resource_group" "aadds-rg" {
   count = var.create_resource_group == false ? 1 : 0
   name  = var.resource_group_name
 }
 
-resource "azurerm_resource_group" "rg" {
+resource "azurerm_resource_group" "aadds-rg" {
   count    = var.create_resource_group ? 1 : 0
   name     = var.resource_group_name
   location = var.location
@@ -51,7 +49,7 @@ data "azurerm_virtual_network" "vnet" {
 resource "azurerm_virtual_network" "vnet" {
   count                 = var.create_virtual_network ? 1 : 0
   name                  = "${local.resource_prefix}-aadds-vnet"
-  location              = local.location
+  location              = var.location
   resource_group_name   = var.virtual_network_resource_group_name == "" ? var.resource_group_name : var.virtual_network_resource_group_name
   address_space         = var.virtual_network_address_space
 
@@ -76,9 +74,10 @@ data "azurerm_subnet" "snet" {
 resource "azurerm_subnet" "snet" {
   count                 = var.create_subnet ? 1 : 0
   name                  = "${local.resource_prefix}-aadds-snet"
-  resource_group_name   = local.resource_group_name
+  resource_group_name   = var.resource_group_name
   virtual_network_name  = var.create_virtual_network ? "${local.resource_prefix}-aadds-vnet" : var.virtual_network_name  
   address_prefixes      = var.subnet_prefixes
+  service_endpoints     = [ "Microsoft.AzureActiveDirectory", "Microsoft.Storage" ]
 
   depends_on = [
     azurerm_virtual_network.vnet,
@@ -95,11 +94,17 @@ resource "azurerm_subnet" "snet" {
 }
 
 # Network Security Groups
+data "azurerm_network_security_group" "aadds" {
+  count               = var.network_security_group_name != null ? 1 : 0
+  name                = var.network_security_group_name
+  resource_group_name = var.network_security_group_resource_group_name != null ? var.network_security_group_resource_group_name : var.resource_group_name
+}
 
 resource "azurerm_network_security_group" "aadds" {
+  count               = var.network_security_group_name != null ? 0 : 1
   name                = "${local.resource_prefix}-aadds-nsg"
-  location            = local.location
-  resource_group_name = local.resource_group_name
+  location            = var.location
+  resource_group_name = var.resource_group_name
 
   tags                = merge({ "ResourceName" = "${local.resource_prefix}-aadds-nsg" }, var.tags, )
 
@@ -109,52 +114,23 @@ resource "azurerm_network_security_group" "aadds" {
     read    = local.timeout_read
     update  = local.timeout_update
   }
-
-  # Allow the Azure platform to monitor, manage, and update the managed domain
-  # See https://docs.microsoft.com/en-us/azure/active-directory-domain-services/alert-nsg#inbound-security-rules
-  security_rule {
-    name                       = "AllowRD"
-    priority                   = 201
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "3389"
-    source_address_prefix      = "CorpNetSaw"
-    destination_address_prefix = "*"
-  }
-
-  security_rule {
-    name                       = "AllowPSRemoting"
-    priority                   = 301
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "5986"
-    source_address_prefix      = "AzureActiveDirectoryDomainServices"
-    destination_address_prefix = "*"
-  }
-
-  # Restrict inbound LDAPS access to specific IP addresses to protect the managed domain from brute force attacks.
-  # See https://docs.microsoft.com/en-us/azure/active-directory-domain-services/alert-ldaps#resolution
-  # See https://docs.microsoft.com/en-us/azure/active-directory-domain-services/tutorial-configure-ldaps#lock-down-secure-ldap-access-over-the-internet
-  # security_rule {
-  #   name                       = "AllowLDAPS"
-  #   priority                   = 401
-  #   direction                  = "Inbound"
-  #   access                     = "Allow"
-  #   protocol                   = "Tcp"
-  #   source_port_range          = "*"
-  #   destination_port_range     = "636"
-  #   source_address_prefix      = "<Authorized LDAPS IPs>"
-  #   destination_address_prefix = "*"
-  # }
 }
 
-resource "azurerm_subnet_network_security_group_association" "aadds" {
-  subnet_id                 = element(coalescelist(azurerm_subnet.snet.*.id, data.azurerm_subnet.snet.*.id, [""]), 0) 
-  network_security_group_id = azurerm_network_security_group.aadds.id
+# Allow the Azure platform to monitor, manage, and update the managed domain
+# See https://docs.microsoft.com/en-us/azure/active-directory-domain-services/alert-nsg#inbound-security-rules
+resource "azurerm_network_security_rule" "aadds-nsg-rule-allow-rd" {
+  network_security_group_name = element(coalescelist(data.azurerm_network_security_group.aadds.*.name, azurerm_network_security_group.aadds.*.name, [""]), 0)
+  resource_group_name         = var.network_security_group_resource_group_name != null ? var.network_security_group_resource_group_name : var.resource_group_name
+
+  name                       = "AllowRD"
+  priority                   = 201
+  direction                  = "Inbound"
+  access                     = "Allow"
+  protocol                   = "Tcp"
+  source_port_range          = "*"
+  destination_port_range     = "3389"
+  source_address_prefix      = "CorpNetSaw"
+  destination_address_prefix = "*"
 
   timeouts {
     create  = local.timeout_create
@@ -162,7 +138,62 @@ resource "azurerm_subnet_network_security_group_association" "aadds" {
     read    = local.timeout_read
     update  = local.timeout_update
   }
+}
 
+# Allow the Azure platform to monitor, manage, and update the managed domain
+# See https://docs.microsoft.com/en-us/azure/active-directory-domain-services/alert-nsg#inbound-security-rules
+resource "azurerm_network_security_rule" "aadds-nsg-rule-allow-psremoting" {
+  network_security_group_name = element(coalescelist(data.azurerm_network_security_group.aadds.*.name, azurerm_network_security_group.aadds.*.name, [""]), 0)
+  resource_group_name         = var.network_security_group_resource_group_name != null ? var.network_security_group_resource_group_name : var.resource_group_name
+
+  name                       = "AllowPSRemoting"
+  priority                   = 301
+  direction                  = "Inbound"
+  access                     = "Allow"
+  protocol                   = "Tcp"
+  source_port_range          = "*"
+  destination_port_range     = "5986"
+  source_address_prefix      = "AzureActiveDirectoryDomainServices"
+  destination_address_prefix = "*"
+
+  timeouts {
+    create  = local.timeout_create
+    delete  = local.timeout_delete
+    read    = local.timeout_read
+    update  = local.timeout_update
+  }
+}
+
+# Restrict inbound LDAPS access to specific IP addresses to protect the managed domain from brute force attacks.
+# See https://docs.microsoft.com/en-us/azure/active-directory-domain-services/alert-ldaps#resolution
+# See https://docs.microsoft.com/en-us/azure/active-directory-domain-services/tutorial-configure-ldaps#lock-down-secure-ldap-access-over-the-internet
+# resource "azurerm_network_security_rule" "aadds-nsg-rule-allow-ldaps" {
+#   count                       = 0
+#
+#   network_security_group_name = element(coalescelist(data.azurerm_network_security_group.aadds.*.name, azurerm_network_security_group.aadds.*.name, [""]), 0)
+#   resource_group_name         = var.network_security_group_resource_group_name != null ? var.network_security_group_resource_group_name : var.resource_group_name
+#
+#   name                        = "AllowLDAPS"
+#   priority                    = 401
+#   direction                   = "Inbound"
+#   access                      = "Allow"
+#   protocol                    = "Tcp"
+#   source_port_range           = "*"
+#   destination_port_range      = "636"
+#   source_address_prefix       = var.ldap_ips
+#   destination_address_prefix  = "*"
+# }
+
+resource "azurerm_subnet_network_security_group_association" "aadds" {
+  subnet_id                 = element(coalescelist(azurerm_subnet.snet.*.id, data.azurerm_subnet.snet.*.id, [""]), 0) 
+  network_security_group_id = element(coalescelist(data.azurerm_network_security_group.aadds.*.id, azurerm_network_security_group.aadds.*.id, [""]), 0)
+
+  timeouts {
+    create  = local.timeout_create
+    delete  = local.timeout_delete
+    read    = local.timeout_read
+    update  = local.timeout_update
+  }
 }
 
 #-------------------------------------
@@ -170,9 +201,16 @@ resource "azurerm_subnet_network_security_group_association" "aadds" {
 #-------------------------------------
 
 # Service Principal for Domain Controller Services published application
-# In public Azure, the ID is 2565bd9d-da50-47d4-8b85-4c97f669dc36.
+# In public Azure, the ID is 2565bd9d-da50-47d4-8b85-4c97f669dc36 (Domain Controller Services).
 data "azuread_service_principal" "aadds" {
-  application_id = "2565bd9d-da50-47d4-8b85-4c97f669dc36"  
+  count           = var.create_domain_controller_services_service_principal ? 0 : 1
+  application_id  = "2565bd9d-da50-47d4-8b85-4c97f669dc36"  
+  #display_name    = "Domain Controller Services" 
+}
+
+resource azuread_service_principal "aadds" {
+  count           = var.create_domain_controller_services_service_principal ? 1 : 0  
+  application_id  = "2565bd9d-da50-47d4-8b85-4c97f669dc36"  
 }
 
 # Microsoft.AAD Provider Registration
@@ -212,8 +250,7 @@ resource "azuread_user" "dc_admin" {
 resource "azuread_group" "dc_admins" {
   count             = var.create_domain_group ? 1 : 0
   display_name      = "AAD DC Administrators"
-  description       = "AADDS Administrators"
-  members           = [ element(coalescelist(azuread_user.dc_admin.*.object_id, data.azuread_user.dc_admin.*.object_id, [""]), 0)  ]
+  description       = "Delegated group to administer Azure AD Domain Services"
   security_enabled  = true
 
   timeouts {
@@ -230,7 +267,7 @@ data "azuread_group" "dc_admins" {
 }
 
 resource "azuread_group_member" "dc_admins" {
-  count             = var.create_domain_group ? 0 : 1
+  count             = var.create_domain_group || var.create_domain_admin ? 1 : 0
   group_object_id   = element(coalescelist(azuread_group.dc_admins.*.object_id, data.azuread_group.dc_admins.*.object_id, [""]), 0)
   member_object_id  = element(coalescelist(azuread_user.dc_admin.*.object_id, data.azuread_user.dc_admin.*.object_id, [""]), 0)
 }
@@ -241,8 +278,8 @@ resource "azuread_group_member" "dc_admins" {
 
 resource "azurerm_active_directory_domain_service" "aadds" {
   name                = "${local.resource_prefix}-aadds"
-  location            = local.location
-  resource_group_name = local.resource_group_name
+  location            = var.location
+  resource_group_name = var.resource_group_name
 
   tags                = merge({ "ResourceName" = "${local.resource_prefix}-aadds" }, var.tags, )
 
@@ -252,7 +289,7 @@ resource "azurerm_active_directory_domain_service" "aadds" {
     read    = local.timeout_read
     update  = local.timeout_update
   }
-
+  
   domain_name = var.domain_name
   sku         = var.sku
 
@@ -274,6 +311,7 @@ resource "azurerm_active_directory_domain_service" "aadds" {
 
   depends_on = [
     data.azuread_service_principal.aadds,
+    azuread_service_principal.aadds,
     azurerm_resource_provider_registration.aadds,
     azurerm_subnet_network_security_group_association.aadds,
   ]

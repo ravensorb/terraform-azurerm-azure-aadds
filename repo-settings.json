@@ -1,0 +1,6 @@
+{
+    "name": "terraform-azurerm-azure-aadds",
+    "description": "Terraform module for creating and setting up Azure Active Directory Domain Servers (AADS)",
+    "version": "v1.0.3",
+    "message": "Added support to dynamically create/reuse Domain Controller Services Service Principal. Added support for adding nsg rules to existing nsg"
+}
