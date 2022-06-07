@@ -53,6 +53,11 @@ variable "subnet_prefixes" {
   default     = [ "10.100.100.0/24 "]
 }
 
+variable "create_domain_controller_services_service_principal" {
+  description = "Indicates if the standard Domain Controler Services Service Principal should be created in the current AAD env"
+  default     = false
+}
+
 variable "domain_name" {
   description = "(Requrired) Domain name to use when creating AADS"
   default     = null

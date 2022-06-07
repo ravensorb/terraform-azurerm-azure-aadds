@@ -2,7 +2,7 @@
 # Local declarations
 #---------------------------------
 # az ad sp create --id "2565bd9d-da50-47d4-8b85-4c97f669dc36"
-# terraform import module.azure-aadds.azurerm_resource_provider_registration.aadds /subscriptions/2cfc6338-ffd7-49af-bc95-4b953575483b/providers/Microsoft.AAD
+# terraform import module.azure-aadds.azurerm_resource_provider_registration.aadds /subscriptions/<subscription id>/providers/Microsoft.AAD
 #---------------------------------
 locals { 
   resource_group_name = element(coalescelist(data.azurerm_resource_group.rgrp.*.name, azurerm_resource_group.rg.*.name, [""]), 0)
@@ -170,9 +170,15 @@ resource "azurerm_subnet_network_security_group_association" "aadds" {
 #-------------------------------------
 
 # Service Principal for Domain Controller Services published application
-# In public Azure, the ID is 2565bd9d-da50-47d4-8b85-4c97f669dc36.
+# In public Azure, the ID is 2565bd9d-da50-47d4-8b85-4c97f669dc36 (Domain Controller Services).
 data "azuread_service_principal" "aadds" {
-  application_id = "2565bd9d-da50-47d4-8b85-4c97f669dc36"  
+  count           = var.create_domain_controller_services_service_principal ? 0 : 1
+  application_id  = "2565bd9d-da50-47d4-8b85-4c97f669dc36"  
+}
+
+resource azuread_service_principal "aadds" {
+  count           = var.create_domain_controller_services_service_principal
+  application_id  = "2565bd9d-da50-47d4-8b85-4c97f669dc36"  
 }
 
 # Microsoft.AAD Provider Registration
@@ -252,7 +258,7 @@ resource "azurerm_active_directory_domain_service" "aadds" {
     read    = local.timeout_read
     update  = local.timeout_update
   }
-
+  
   domain_name = var.domain_name
   sku         = var.sku
 
@@ -274,6 +280,7 @@ resource "azurerm_active_directory_domain_service" "aadds" {
 
   depends_on = [
     data.azuread_service_principal.aadds,
+    azuread_service_principal.aadds,
     azurerm_resource_provider_registration.aadds,
     azurerm_subnet_network_security_group_association.aadds,
   ]
