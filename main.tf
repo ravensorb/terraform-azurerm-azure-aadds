@@ -185,6 +185,7 @@ resource "azurerm_network_security_rule" "aadds-nsg-rule-allow-psremoting" {
 # }
 
 resource "azurerm_subnet_network_security_group_association" "aadds" {
+  count                     = var.network_security_group_name != null ? 0 : 1
   subnet_id                 = element(coalescelist(azurerm_subnet.snet.*.id, data.azurerm_subnet.snet.*.id, [""]), 0) 
   network_security_group_id = element(coalescelist(data.azurerm_network_security_group.aadds.*.id, azurerm_network_security_group.aadds.*.id, [""]), 0)
 
